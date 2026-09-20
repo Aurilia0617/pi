@@ -98,7 +98,11 @@ describe("Editor component", () => {
 			editor.handleInput("\x1b[A"); // Up at start - shows "prompt"
 			assert.strictEqual(editor.getText(), "prompt");
 
-			editor.handleInput("\x1b[B"); // Down - restores draft
+			editor.handleInput("\x1b[B"); // Down - cursor to end of entry first
+			assert.strictEqual(editor.getText(), "prompt");
+			assert.deepStrictEqual(editor.getCursor(), { line: 0, col: 6 });
+
+			editor.handleInput("\x1b[B"); // Down at end - restores draft
 			assert.strictEqual(editor.getText(), "draft");
 			assert.deepStrictEqual(editor.getCursor(), { line: 0, col: 0 });
 		});
@@ -117,7 +121,11 @@ describe("Editor component", () => {
 			editor.handleInput("\x1b[A"); // second
 			editor.handleInput("\x1b[A"); // first
 
-			// Navigate back
+			// Navigate back (cursor reaches the end of each entry first)
+			editor.handleInput("\x1b[B"); // cursor to end of "first"
+			assert.strictEqual(editor.getText(), "first");
+			assert.deepStrictEqual(editor.getCursor(), { line: 0, col: 5 });
+
 			editor.handleInput("\x1b[B"); // second
 			assert.strictEqual(editor.getText(), "second");
 
@@ -126,6 +134,31 @@ describe("Editor component", () => {
 
 			editor.handleInput("\x1b[B"); // draft
 			assert.strictEqual(editor.getText(), "draft");
+		});
+
+		it("moves the cursor to line start before browsing to an older entry", () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+
+			editor.addToHistory("first");
+			editor.addToHistory("second");
+			editor.setText("draft");
+
+			editor.handleInput("\x1b[A"); // Up from draft end - cursor to line start first
+			assert.strictEqual(editor.getText(), "draft");
+			assert.deepStrictEqual(editor.getCursor(), { line: 0, col: 0 });
+
+			editor.handleInput("\x1b[A"); // Up at start - shows "second"
+			assert.strictEqual(editor.getText(), "second");
+			assert.deepStrictEqual(editor.getCursor(), { line: 0, col: 0 });
+
+			editor.handleInput("\x1b[C"); // Right - cursor mid-entry
+			editor.handleInput("\x1b[A"); // Up - moves cursor to line start first
+			assert.strictEqual(editor.getText(), "second");
+			assert.deepStrictEqual(editor.getCursor(), { line: 0, col: 0 });
+
+			editor.handleInput("\x1b[A"); // Up at start - shows "first"
+			assert.strictEqual(editor.getText(), "first");
+			assert.deepStrictEqual(editor.getCursor(), { line: 0, col: 0 });
 		});
 
 		it("exits history mode when typing a character", () => {
@@ -262,11 +295,15 @@ describe("Editor component", () => {
 			editor.handleInput("\x1b[A"); // multi-line entry
 			editor.handleInput("\x1b[A"); // older entry
 
-			editor.handleInput("\x1b[B"); // Down - shows multi-line entry at end
+			editor.handleInput("\x1b[B"); // Down - cursor to end of "older entry" first
+			assert.strictEqual(editor.getText(), "older entry");
+			assert.deepStrictEqual(editor.getCursor(), { line: 0, col: 11 });
+
+			editor.handleInput("\x1b[B"); // Down at end - shows multi-line entry at end
 			assert.strictEqual(editor.getText(), "line1\nline2\nline3");
 			assert.deepStrictEqual(editor.getCursor(), { line: 2, col: 5 });
 
-			editor.handleInput("\x1b[B"); // Down again - immediately navigates to newer entry
+			editor.handleInput("\x1b[B"); // Down again - navigates to newer entry
 			assert.strictEqual(editor.getText(), "newer entry");
 		});
 

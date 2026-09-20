@@ -10,6 +10,9 @@ const nvidiaNIMResourceExhaustedMessage = "ResourceExhausted: Worker local total
 const bunFetchSocketClosedMessage =
 	"The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()";
 const openAIResponsesEarlyEofMessage = "OpenAI Responses stream ended before a terminal response event";
+const anthropicUpstreamStreamInterruptedMessage = "Error: Upstream response stream was interrupted";
+const upstreamHttp2StreamFailedMessage = "Error: Upstream HTTP/2 stream failed";
+const upstreamServiceTemporarilyUnavailableMessage = "Error: Upstream service temporarily unavailable";
 const wrappedDnsLookupError =
 	"The pending stream has been canceled (caused by: getaddrinfo ENOTFOUND bedrock-runtime.us-east-1.amazonaws.com)";
 const azurePeakLoadError =
@@ -68,6 +71,25 @@ describe("provider retry classification", () => {
 				fauxAssistantMessage("", { stopReason: "error", errorMessage: openAIResponsesEarlyEofMessage }),
 			),
 		).toBe(true);
+	});
+
+	it.each([
+		anthropicUpstreamStreamInterruptedMessage,
+		upstreamHttp2StreamFailedMessage,
+		upstreamServiceTemporarilyUnavailableMessage,
+	])("matches upstream gateway transient failure wording: %s", (errorMessage) => {
+		expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(true);
+	});
+
+	it("keeps upstream gateway wording non-retryable when quota errors are present", () => {
+		expect(
+			isRetryableAssistantError(
+				fauxAssistantMessage("", {
+					stopReason: "error",
+					errorMessage: `${upstreamServiceTemporarilyUnavailableMessage}: quota exceeded`,
+				}),
+			),
+		).toBe(false);
 	});
 
 	it("matches Azure peak-load capacity errors", () => {
@@ -187,6 +209,21 @@ describe("retryAssistantCall", () => {
 		expect(res.content).toEqual([{ type: "text", text: "recovered" }]);
 		expect(produce).toHaveBeenCalledTimes(3);
 		expect(onRetryFinished).toHaveBeenCalledWith(true, 2);
+	});
+
+	it("recovers when an upstream gateway transient error clears on retry", async () => {
+		let n = 0;
+		const produce = vi.fn(async () => {
+			n++;
+			return n === 1
+				? fauxAssistantMessage("", { stopReason: "error", errorMessage: upstreamHttp2StreamFailedMessage })
+				: fauxAssistantMessage("recovered");
+		});
+		const onRetryScheduled = vi.fn();
+		const res = await retryAssistantCall(produce, enabled, undefined, { onRetryScheduled });
+		expect(res.content).toEqual([{ type: "text", text: "recovered" }]);
+		expect(produce).toHaveBeenCalledTimes(2);
+		expect(onRetryScheduled).toHaveBeenCalledTimes(1);
 	});
 
 	it("reports an aborted retried call as unsuccessful", async () => {

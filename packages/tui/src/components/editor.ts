@@ -434,10 +434,6 @@ export class Editor implements Component, Focusable {
 		}
 	}
 
-	private isEditorEmpty(): boolean {
-		return this.state.lines.length === 1 && this.state.lines[0] === "";
-	}
-
 	private isOnFirstVisualLine(): boolean {
 		const visualLines = this.buildVisualLineMap(this.lastWidth);
 		const currentVisualLine = this.findCurrentVisualLine(visualLines);
@@ -921,10 +917,9 @@ export class Editor implements Component, Focusable {
 
 		// Arrow key navigation (with history support)
 		if (kb.matches(data, "tui.editor.cursorUp")) {
-			if (
-				this.isOnFirstVisualLine() &&
-				(this.isEditorEmpty() || this.historyIndex > -1 || this.state.cursorCol === 0)
-			) {
+			// Readline-style: cursor moves to line start first; switching to an
+			// older history entry only happens when the cursor is already there.
+			if (this.isOnFirstVisualLine() && this.state.cursorCol === 0) {
 				this.navigateHistory(-1);
 			} else if (this.isOnFirstVisualLine()) {
 				// Already at top - jump to start of line
@@ -935,7 +930,13 @@ export class Editor implements Component, Focusable {
 			return;
 		}
 		if (kb.matches(data, "tui.editor.cursorDown")) {
-			if (this.historyIndex > -1 && this.isOnLastVisualLine()) {
+			// Readline-style: cursor moves to line end first; switching to a newer
+			// history entry (or restoring the draft) only happens at the line end.
+			if (
+				this.historyIndex > -1 &&
+				this.isOnLastVisualLine() &&
+				this.state.cursorCol === (this.state.lines[this.state.cursorLine] || "").length
+			) {
 				this.navigateHistory(1);
 			} else if (this.isOnLastVisualLine()) {
 				// Already at bottom - jump to end of line

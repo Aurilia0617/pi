@@ -24,7 +24,8 @@ const NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN = buildProviderErrorPattern([
 ]);
 
 const RETRYABLE_PROVIDER_ERROR_PATTERN = buildProviderErrorPattern([
-	// Generic provider load, HTTP status, and server-side transient failures.
+	// Generic provider load, HTTP status, and server-side transient failures,
+	// including gateway text such as "Upstream service temporarily unavailable".
 	"overloaded",
 	"currently experiencing high demand",
 	"rate.?limit",
@@ -37,6 +38,7 @@ const RETRYABLE_PROVIDER_ERROR_PATTERN = buildProviderErrorPattern([
 	"520",
 	"524",
 	"service.?unavailable",
+	"temporarily unavailable",
 	"server.?error",
 	"internal.?error",
 
@@ -71,11 +73,16 @@ const RETRYABLE_PROVIDER_ERROR_PATTERN = buildProviderErrorPattern([
 
 	// Premature stream endings from SDKs and transports. Anthropic can throw
 	// "stream ended without ..." and "Anthropic stream ended before message_stop"
-	// (#4433); Bedrock/Smithy can throw an HTTP/2 no-response error (#3594).
+	// (#4433); the Anthropic gateway can drop the upstream with "Upstream response
+	// stream was interrupted"; Bedrock/Smithy can throw an HTTP/2 no-response error
+	// (#3594); gateways/proxies can drop the upstream HTTP/2 stream with "Upstream
+	// HTTP/2 stream failed".
 	"ended without",
 	"stream ended before message_stop",
 	"stream ended before a terminal response event",
+	"stream was interrupted",
 	"http2 request did not get a response",
+	"http/2.?stream.?failed",
 
 	// Provider-requested retry delay cap failures should flow through the outer
 	// retry policy so callers can surface/abort the backoff (#1123).
