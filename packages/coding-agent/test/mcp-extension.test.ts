@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { InMemoryAuthStorageBackend } from "../src/core/auth-storage.ts";
 import { truncateMiddle } from "../src/core/tools/truncate.ts";
 import { getMcpToolExposure, loadMcpConfig, type McpServerEntry } from "../src/extensions/mcp/config.ts";
+import { MAX_SERVERS_SECTION_CHARS, renderServersSection } from "../src/extensions/mcp/index.ts";
 import {
 	createDefaultTransport,
 	McpOAuthCredentialStore,
@@ -83,9 +84,12 @@ describe("MCP config", () => {
 				autoEnableCodemode: false,
 				mcpServers: {
 					later: { command: "x", exposure: "deferred" },
-					scripts: { command: "x", exposure: "codemode-deferred" },
+					// `codemode-deferred` is an alias for `codemode`.
+					scripts: { command: "x", exposure: "codemode-deferred", toolExposure: { a: "codemode-deferred" } },
 					off: { command: "x", exposure: "hidden" },
 					wrong: { command: "x", exposure: "model-only" },
+					described: { command: "x", description: "Docs search" },
+					badDescription: { command: "x", description: 1 },
 				},
 			},
 			{ autoEnableCodemode: "yes", mcpServers: {} },
@@ -95,17 +99,23 @@ describe("MCP config", () => {
 		expect(untrusted.autoEnableCodemode).toBe(false);
 		expect(untrusted.servers.map((server) => [server.name, server.config.exposure])).toEqual([
 			["later", "deferred"],
-			["scripts", "codemode-deferred"],
+			["scripts", "codemode"],
 			["off", "hidden"],
+			["described", undefined],
 		]);
-		expect(untrusted.errors).toEqual([expect.stringContaining('server "wrong": exposure must be one of')]);
+		expect(untrusted.servers[1].config.toolExposure).toEqual({ a: "codemode" });
+		expect(untrusted.servers[3].config.description).toBe("Docs search");
+		expect(untrusted.errors).toEqual([
+			expect.stringContaining('server "wrong": exposure must be one of'),
+			expect.stringContaining('server "badDescription": description must be a string'),
+		]);
 
 		const trusted = loadMcpConfig({ ...paths, projectTrusted: true });
 		expect(trusted.autoEnableCodemode).toBe(false);
 		expect(trusted.errors).toContainEqual(expect.stringContaining("autoEnableCodemode must be a boolean"));
 	});
 
-	it("validates the OAuth callback URL and scope", () => {
+	it("validates the OAuth callback URL, scope, and client name", () => {
 		const paths = setup(
 			{
 				mcpServers: {
@@ -118,16 +128,19 @@ describe("MCP config", () => {
 					remote: { url: "https://a.example/mcp", oauth: { callbackUrl: "https://example.com/callback" } },
 					both: { url: "https://a.example/mcp", oauth: { callbackUrl: "http://127.0.0.1:1/cb", callbackPort: 2 } },
 					scope: { url: "https://a.example/mcp", oauth: { scope: ["a"] } },
+					named: { url: "https://a.example/mcp", oauth: { clientName: "Claude Code" } },
+					unnamed: { url: "https://a.example/mcp", oauth: { clientName: " " } },
 				},
 			},
 			{},
 		);
 		const { servers, errors } = loadMcpConfig({ ...paths, projectTrusted: false });
-		expect(servers.map((server) => server.name)).toEqual(["ok", "ipv6", "same"]);
+		expect(servers.map((server) => server.name)).toEqual(["ok", "ipv6", "same", "named"]);
 		expect(errors).toEqual([
 			expect.stringContaining('server "remote": oauth.callbackUrl must be an http URI on localhost'),
 			expect.stringContaining('server "both": oauth.callbackUrl and oauth.callbackPort name different ports'),
 			expect.stringContaining('server "scope": oauth.scope must be a string'),
+			expect.stringContaining('server "unnamed": oauth.clientName must be a non-empty string'),
 		]);
 	});
 
@@ -556,5 +569,48 @@ for await (const line of createInterface({ input: process.stdin })) {
 		expect(await connection.callTool("echo", {}, {})).toEqual({ content: [{ type: "text", text: "ok" }] });
 		expect(() => connection.oauthSettings()).toThrow("oauth.clientSecret");
 		await connection.close();
+	});
+});
+
+describe("MCP servers section", () => {
+	const server = (name: string, description?: string, exposure?: "codemode" | "deferred" | "direct") => ({
+		entry: {
+			name,
+			config: { command: "x", ...(description ? { description } : {}), ...(exposure ? { exposure } : {}) },
+			source: "test",
+		},
+	});
+
+	it("lists servers with how their tools are reached and the first line of their description", () => {
+		const section = renderServersSection([
+			server("docs", "Docs search.\nMore."),
+			server("later", undefined, "deferred"),
+			server("direct", "Declared.", "direct"),
+			{ entry: server("plain").entry, connection: { instructions: "From instructions." } },
+		]);
+		expect(section?.split("\n").slice(1)).toEqual([
+			"- mcp__docs (codemode): Docs search.",
+			"- mcp__later (tool_search)",
+			"- mcp__plain (codemode): From instructions.",
+		]);
+		expect(renderServersSection([server("direct", "Declared.", "direct")])).toBeUndefined();
+	});
+
+	it("shortens descriptions to fit the size limit", () => {
+		const servers = Array.from({ length: 40 }, (_, index) => server(`server${index}`, "x".repeat(400)));
+		const section = renderServersSection(servers) ?? "";
+		expect(section.length).toBeLessThanOrEqual(MAX_SERVERS_SECTION_CHARS);
+		expect(section.split("\n")).toHaveLength(41);
+		expect(section).toContain("- mcp__server39 (codemode): x");
+	});
+
+	it("leaves out the last servers when their names alone do not fit", () => {
+		const servers = Array.from({ length: 200 }, (_, index) => server(`server-with-a-long-name-${index}`, "desc"));
+		const section = renderServersSection(servers) ?? "";
+		expect(section.length).toBeLessThanOrEqual(MAX_SERVERS_SECTION_CHARS);
+		const lines = section.split("\n");
+		expect(lines.at(-1)).toMatch(/^- … \d+ more servers; find their tools with searchTools\(\)$/);
+		const omitted = Number(/(\d+) more/.exec(lines.at(-1) ?? "")?.[1]);
+		expect(lines.length - 2 + omitted).toBe(200);
 	});
 });
