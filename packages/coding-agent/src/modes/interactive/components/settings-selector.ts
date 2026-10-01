@@ -85,6 +85,7 @@ export interface SettingsConfig {
 	treeFilterMode: "default" | "no-tools" | "user-only" | "labeled-only" | "all";
 	showHardwareCursor: boolean;
 	editorPaddingX: number;
+	editorHistoryCursorFirst: boolean;
 	outputPad: 0 | 1;
 	autocompleteMaxVisible: number;
 	quietStartup: boolean;
@@ -124,6 +125,7 @@ export interface SettingsCallbacks {
 	onTreeFilterModeChange: (mode: "default" | "no-tools" | "user-only" | "labeled-only" | "all") => void;
 	onShowHardwareCursorChange: (enabled: boolean) => void;
 	onEditorPaddingXChange: (padding: number) => void;
+	onEditorHistoryCursorFirstChange: (enabled: boolean) => void;
 	onOutputPadChange: (padding: 0 | 1) => void;
 	onAutocompleteMaxVisibleChange: (maxVisible: number) => void;
 	onQuietStartupChange: (enabled: boolean) => void;
@@ -586,6 +588,12 @@ export class SettingsSelectorComponent extends Container {
 				values: ["default", "no-tools", "user-only", "labeled-only", "all"],
 			},
 			{
+				id: "history-cursor-first",
+				label: "Cursor-first history",
+				currentValue: config.editorHistoryCursorFirst ? "true" : "false",
+				values: ["true", "false"],
+			},
+			{
 				id: "warnings",
 				label: "Warnings",
 				description: "Enable or disable individual warnings",
@@ -945,6 +953,9 @@ export class SettingsSelectorComponent extends Container {
 						break;
 					case "editor-padding":
 						callbacks.onEditorPaddingXChange(parseInt(newValue, 10));
+						break;
+					case "history-cursor-first":
+						callbacks.onEditorHistoryCursorFirstChange(newValue === "true");
 						break;
 					case "output-padding":
 						callbacks.onOutputPadChange(newValue === "0" ? 0 : 1);

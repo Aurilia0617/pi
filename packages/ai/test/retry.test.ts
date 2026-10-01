@@ -70,6 +70,30 @@ describe("provider retry classification", () => {
 		).toBe(true);
 	});
 
+	it.each([
+		"Error: Upstream service temporarily unavailable",
+		"Error: Upstream response stream was interrupted",
+		"Error: Upstream HTTP/2 stream failed",
+		"Error: Upstream HTTP2 stream failed",
+		"upstream http/2_stream_failed",
+	])("matches gateway transient failures without HTTP status: %s", (errorMessage) => {
+		expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(true);
+	});
+
+	it.each(["quota exceeded", "insufficient_quota", "billing", "GoUsageLimitError"])(
+		"keeps gateway errors with %s non-retryable",
+		(limitError) => {
+			const errorMessage = `Upstream service temporarily unavailable: ${limitError}`;
+			expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(false);
+		},
+	);
+
+	it("does not classify aborted or successful gateway messages as retryable", () => {
+		const errorMessage = "Upstream response stream was interrupted";
+		expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "aborted", errorMessage }))).toBe(false);
+		expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "stop", errorMessage }))).toBe(false);
+	});
+
 	it("matches Azure peak-load capacity errors", () => {
 		// Regression for #9669.
 		expect(

@@ -5,6 +5,7 @@ import { stream as streamAnthropic } from "../src/api/anthropic-messages.ts";
 import { transformMessages } from "../src/api/transform-messages.ts";
 import { getModel, normalizeContext } from "../src/compat.ts";
 import type { Api, Model, ToolCall } from "../src/types.ts";
+import { retryAssistantCall } from "../src/utils/retry.ts";
 
 function createSseResponse(events: Array<{ event: string; data: string }>): Response {
 	const body = events.map(({ event, data }) => `event: ${event}\ndata: ${data}\n`).join("\n");
@@ -110,6 +111,55 @@ function createResponseModelSseResponse(model: string, contentBlock: ResponseCon
 }
 
 describe("Anthropic raw SSE parsing", () => {
+	it.each([
+		"Upstream service temporarily unavailable",
+		"Upstream response stream was interrupted",
+		"Upstream HTTP/2 stream failed",
+	])("retries a gateway SSE error after HTTP 200: %s", async (message) => {
+		const model = getModel("anthropic", "claude-haiku-4-5");
+		const context = normalizeContext({ messages: [{ role: "user", content: "Hello", timestamp: 1 }] });
+		const errorData = JSON.stringify({ type: "error", error: { type: "api_error", message } });
+
+		for (const partialOutput of [false, true]) {
+			let requests = 0;
+			const client = {
+				beta: {
+					messages: {
+						create: () => ({
+							asResponse: async () => {
+								requests++;
+								return createSseResponse(
+									requests === 1
+										? [
+												...(partialOutput ? minimalAnthropicEvents.slice(0, 3) : []),
+												{ event: "error", data: errorData },
+											]
+										: minimalAnthropicEvents,
+								);
+							},
+						}),
+					},
+				},
+			} as unknown as Anthropic;
+			const retryErrors: string[] = [];
+			const result = await retryAssistantCall(
+				() => streamAnthropic(model, context, { client, maxRetries: 3 }).result(),
+				{ enabled: true, maxRetries: 1, baseDelayMs: 0 },
+				undefined,
+				{
+					onRetryScheduled: (_attempt, _maxAttempts, _delayMs, errorMessage) => {
+						retryErrors.push(errorMessage);
+					},
+				},
+			);
+
+			expect(requests).toBe(2);
+			expect(retryErrors).toEqual([errorData]);
+			expect(result.stopReason).toBe("stop");
+			expect(result.content).toEqual([{ type: "text", text: "Hello" }]);
+		}
+	});
+
 	it("forwards parsed provider stream events in order", async () => {
 		const model = getModel("anthropic", "claude-haiku-4-5");
 		const providerEvents: unknown[] = [];

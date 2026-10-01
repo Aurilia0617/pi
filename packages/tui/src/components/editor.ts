@@ -242,6 +242,8 @@ export interface EditorTheme {
 export interface EditorOptions {
 	paddingX?: number;
 	autocompleteMaxVisible?: number;
+	/** Require line-start/end cursor placement before arrow keys change history entries. Default: false. */
+	historyCursorFirst?: boolean;
 }
 
 const SLASH_COMMAND_SELECT_LIST_LAYOUT: SelectListLayoutOptions = {
@@ -345,6 +347,7 @@ export class Editor implements Component, Focusable {
 	private history: string[] = [];
 	private historyIndex: number = -1; // -1 = not browsing, 0 = most recent, 1 = older, etc.
 	private historyDraft: EditorState | null = null;
+	private historyCursorFirst: boolean;
 
 	// Kill ring for Emacs-style kill/yank operations
 	private killRing = new KillRing();
@@ -378,6 +381,7 @@ export class Editor implements Component, Focusable {
 		this.paddingX = Number.isFinite(paddingX) ? Math.max(0, Math.floor(paddingX)) : 0;
 		const maxVisible = options.autocompleteMaxVisible ?? 5;
 		this.autocompleteMaxVisible = Number.isFinite(maxVisible) ? Math.max(3, Math.min(20, Math.floor(maxVisible))) : 5;
+		this.historyCursorFirst = options.historyCursorFirst ?? false;
 	}
 
 	/** Set of currently valid paste IDs, for marker-aware segmentation. */
@@ -412,6 +416,14 @@ export class Editor implements Component, Focusable {
 			this.autocompleteMaxVisible = newMaxVisible;
 			this.tui.requestRender();
 		}
+	}
+
+	getHistoryCursorFirst(): boolean {
+		return this.historyCursorFirst;
+	}
+
+	setHistoryCursorFirst(enabled: boolean): void {
+		this.historyCursorFirst = enabled;
 	}
 
 	setAutocompleteProvider(provider: AutocompleteProvider): void {
@@ -925,7 +937,7 @@ export class Editor implements Component, Focusable {
 		if (kb.matches(data, "tui.editor.cursorUp")) {
 			if (
 				this.isOnFirstVisualLine() &&
-				(this.isEditorEmpty() || this.historyIndex > -1 || this.state.cursorCol === 0)
+				(this.isEditorEmpty() || (!this.historyCursorFirst && this.historyIndex > -1) || this.state.cursorCol === 0)
 			) {
 				this.navigateHistory(-1);
 			} else if (this.isOnFirstVisualLine()) {
@@ -937,7 +949,12 @@ export class Editor implements Component, Focusable {
 			return;
 		}
 		if (kb.matches(data, "tui.editor.cursorDown")) {
-			if (this.historyIndex > -1 && this.isOnLastVisualLine()) {
+			if (
+				this.historyIndex > -1 &&
+				this.isOnLastVisualLine() &&
+				(!this.historyCursorFirst ||
+					this.state.cursorCol === (this.state.lines[this.state.cursorLine] || "").length)
+			) {
 				this.navigateHistory(1);
 			} else if (this.isOnLastVisualLine()) {
 				// Already at bottom - jump to end of line

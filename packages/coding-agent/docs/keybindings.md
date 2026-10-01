@@ -64,6 +64,8 @@ Examples: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `super+k`, `ctrl+sup
 | `tui.editor.pageUp` | `pageUp`, `ctrl+pageUp` | Scroll up by page |
 | `tui.editor.pageDown` | `pageDown`, `ctrl+pageDown` | Scroll down by page |
 
+With `editorHistoryCursorFirst: true` (the default), Up at the top first moves to the line start and Down at the bottom first moves to the line end; another press changes the history entry. Set it to `false` to browse immediately at the top or bottom while already browsing history. Configure this in `/settings` or `settings.json`; `/reload` applies manual edits.
+
 The dedicated history actions browse prompt history regardless of cursor position and take precedence over application actions using the same key.
 
 #### Text editing
