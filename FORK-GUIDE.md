@@ -70,6 +70,8 @@
    git -C ~/project/pi branch -D vX.Y.Z-local
    ```
 
+分支纪律：仓库长期只有 `main` 一条本地分支。不建 backup 分支（旧历史需要时从 `git reflog` 找）；不建 `upstream-vX.X` 本地分支，上游代码一律用 tag 引用；临时 worktree/中间分支验证完即删。
+
 ## 从零设置（全新 Mac）
 
 前置：Homebrew、Git、Node ≥ 22.19。
@@ -111,7 +113,7 @@ pi() {
   - 面板条目移到编辑器设置区（`editor-padding` 之后）并补 description；
   - tui JSDoc 去掉对 coding-agent 内部常量的引用；
   - 删除重复的 suite reload 测试（已被 settings-manager round-trip 覆盖）。
-- **2026-10-26（切换 main 模型）**：自始至终只维护一条 `main`（本地与 fork 同步）；升级流程 = `vX.Y.Z-local` 中间分支重新实现 → 移动 main → `--force-with-lease` 推送 fork → 删中间分支；`pi()` 固定指向 `~/project/pi`，升级不改 zshrc；旧 main 的本地差异收敛进「历史遗留」一节。
+- **2026-10-26（切换 main 模型）**：自始至终只维护一条 `main`（本地与 fork 同步）；升级流程 = `vX.Y.Z-local` 中间分支重新实现 → 移动 main → `--force-with-lease` 推送 fork → 删中间分支；`pi()` 固定指向 `~/project/pi`，升级不改 zshrc；旧 main 的本地差异收敛进「历史遗留」一节。同日删除全部历史 backup 分支与 `upstream-v1.4.0` 分支，本地仅剩 `main`。
 - **未做、供后续参考**：
   - 上游化：以策略钩子形态（`ctx.ui.addHistoryNavigationPolicy`，对称于 `addAutocompleteProvider`）提 PR 的接受度高于布尔开关；上游若合并，本补丁可整体删除，仅在 `SETTINGS_DEFAULTS` 保留默认值。
   - 扩展接口（`ctx.ui.setHistoryCursorFirst`，约 6 行）等真有第二个消费者再加。
