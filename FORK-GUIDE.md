@@ -63,6 +63,57 @@ worktree 位于 `~/project/pi-v1.4.0-local`，用 `./pi-test.sh` 从源码运行
 5. **提交单 commit**（feat(tui,coding-agent): cursor-first prompt history navigation），工作树保持干净，本文件随分支走。
 6. **更新本文档**：凡是实现方式或思想上有改进（新的收敛点、上游合并了相关功能使本补丁归零、发现更好的接线方式），在下面「改进记录」追加一条并修订正文相应段落。
 
+## 从零设置（全新 Mac）
+
+前置：Homebrew、Git、Node ≥ 22.19；克隆仓库并配好 remote（`origin` 为自己 fork，`upstream` 为 `earendil-works/pi`）。详见 `main` 分支上的 `LOCAL_DEV_MACOS.md`。
+
+1. 建配置目录（首次）并检出本分支：
+   ```bash
+   mkdir -p ~/Documents/pi_config
+   git -C ~/project/pi fetch upstream --tags
+   git -C ~/project/pi worktree add ~/project/pi-v1.4.0-local -b v1.4.0-local v1.4.0   # 已存在则跳过
+   cd ~/project/pi-v1.4.0-local && npm ci && npm --prefix packages/ai run generate-models
+   ```
+2. 在 `~/.zshrc` 写入（全新机器的最小完整版）：
+   ```zsh
+   # pi 配置统一放自定义目录（不碰默认 ~/.pi/agent）
+   export PI_CODING_AGENT_DIR="$HOME/Documents/pi_config"
+   export PI_ASK_USER_DISPLAY_MODE=inline
+
+   # 当前使用版本：worktree 源码直跑（改代码立即生效，无需构建）
+   pi() {
+     PI_CODING_AGENT_DIR="$HOME/Documents/pi_config" \
+       "$HOME/project/pi-v1.4.0-local/pi-test.sh" "$@"
+   }
+
+   # 回退：主 worktree（main 分支）
+   pi-main() {
+     PI_CODING_AGENT_DIR="$HOME/Documents/pi_config" \
+       "$HOME/project/pi/pi-test.sh" "$@"
+   }
+   ```
+3. `source ~/.zshrc`（或新开终端），验证：
+   ```bash
+   type pi && pi --version        # 期望输出 1.4.0
+   ```
+
+说明：`pi-test.sh` 被 git 跟踪且保留可执行位，worktree 检出即可用；函数内重复传 `PI_CODING_AGENT_DIR` 是为了显式覆盖，防止外部环境变量漂移。
+
+## 升级后更新 ~/.zshrc
+
+每次按「下次升级流程」建好新 worktree（如 `~/project/pi-v1.5.0-local`）并验证通过后：
+
+1. 把 `pi()` 里的路径改成新 worktree 的 `pi-test.sh`（只改这一处路径）；
+2. 旧版本要么删掉它的函数，要么把旧 worktree 的函数重命名保留一个版本作回退（`pi-main` 指向 `~/project/pi` 是固定习惯，中间版本不必都留）；
+3. 清理不再需要的旧 worktree（确认无未合并改动后）：
+   ```bash
+   git -C ~/project/pi worktree remove ~/project/pi-v1.4.0-local
+   git -C ~/project/pi branch -d v1.4.0-local   # 可选
+   ```
+4. `source ~/.zshrc` 或新开终端，`pi --version` 确认新版本号。
+
+注意：正在运行的 pi 会话不会受 `~/.zshrc` 修改影响，它继续用启动时那棵树；重启 pi 才切到新版本。回退同理。
+
 ## 改进记录
 
 - **2026-10-26（v1.4.0 重实现，相对 main 上的旧实现）**：
