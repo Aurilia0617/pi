@@ -243,6 +243,13 @@ export interface EditorTheme {
 export interface EditorOptions {
 	paddingX?: number;
 	autocompleteMaxVisible?: number;
+	/**
+	 * Require line-start/end cursor placement before arrow keys change history entries.
+	 *
+	 * Defaults to `false` so the TUI library keeps upstream behavior; applications can opt in
+	 * by passing `true` or calling {@link Editor.setHistoryCursorFirst}.
+	 */
+	historyCursorFirst?: boolean;
 }
 
 const SLASH_COMMAND_SELECT_LIST_LAYOUT: SelectListLayoutOptions = {
@@ -346,6 +353,7 @@ export class Editor implements Component, Focusable {
 	private history: string[] = [];
 	private historyIndex: number = -1; // -1 = not browsing, 0 = most recent, 1 = older, etc.
 	private historyDraft: EditorState | null = null;
+	private historyCursorFirst: boolean;
 
 	// Kill ring for Emacs-style kill/yank operations
 	private killRing = new KillRing();
@@ -379,6 +387,8 @@ export class Editor implements Component, Focusable {
 		this.paddingX = Number.isFinite(paddingX) ? Math.max(0, Math.floor(paddingX)) : 0;
 		const maxVisible = options.autocompleteMaxVisible ?? 5;
 		this.autocompleteMaxVisible = Number.isFinite(maxVisible) ? Math.max(3, Math.min(20, Math.floor(maxVisible))) : 5;
+		// Library default stays `false` (upstream behavior); applications opt in explicitly.
+		this.historyCursorFirst = options.historyCursorFirst ?? false;
 	}
 
 	/** Set of currently valid paste IDs, for marker-aware segmentation. */
@@ -413,6 +423,14 @@ export class Editor implements Component, Focusable {
 			this.autocompleteMaxVisible = newMaxVisible;
 			this.tui.requestRender();
 		}
+	}
+
+	getHistoryCursorFirst(): boolean {
+		return this.historyCursorFirst;
+	}
+
+	setHistoryCursorFirst(enabled: boolean): void {
+		this.historyCursorFirst = enabled;
 	}
 
 	setAutocompleteProvider(provider: AutocompleteProvider): void {
@@ -451,6 +469,27 @@ export class Editor implements Component, Focusable {
 		const visualLines = this.buildVisualLineMap(this.lastWidth);
 		const currentVisualLine = this.findCurrentVisualLine(visualLines);
 		return currentVisualLine === visualLines.length - 1;
+	}
+
+	private currentLineLength(): number {
+		return (this.state.lines[this.state.cursorLine] || "").length;
+	}
+
+	/**
+	 * Whether an arrow key should switch history entries instead of moving the cursor.
+	 *
+	 * With `historyCursorFirst` the cursor has to reach the first line's start (`-1`) or the last
+	 * line's end (`1`) first, both while typing a draft and while already browsing history. Without
+	 * it, browsing entries switch immediately, which is upstream behavior.
+	 */
+	private shouldSwitchHistory(direction: 1 | -1): boolean {
+		if (direction === -1) {
+			if (!this.isOnFirstVisualLine()) return false;
+			if (this.isEditorEmpty() || this.state.cursorCol === 0) return true;
+			return this.historyIndex > -1 && !this.historyCursorFirst;
+		}
+		if (this.historyIndex === -1 || !this.isOnLastVisualLine()) return false;
+		return !this.historyCursorFirst || this.state.cursorCol === this.currentLineLength();
 	}
 
 	private navigateHistory(direction: 1 | -1): void {
@@ -924,10 +963,7 @@ export class Editor implements Component, Focusable {
 
 		// Arrow key navigation (with history support)
 		if (kb.matches(data, "tui.editor.cursorUp")) {
-			if (
-				this.isOnFirstVisualLine() &&
-				(this.isEditorEmpty() || this.historyIndex > -1 || this.state.cursorCol === 0)
-			) {
+			if (this.shouldSwitchHistory(-1)) {
 				this.navigateHistory(-1);
 			} else if (this.isOnFirstVisualLine()) {
 				// Already at top - jump to start of line
@@ -938,7 +974,7 @@ export class Editor implements Component, Focusable {
 			return;
 		}
 		if (kb.matches(data, "tui.editor.cursorDown")) {
-			if (this.historyIndex > -1 && this.isOnLastVisualLine()) {
+			if (this.shouldSwitchHistory(1)) {
 				this.navigateHistory(1);
 			} else if (this.isOnLastVisualLine()) {
 				// Already at bottom - jump to end of line

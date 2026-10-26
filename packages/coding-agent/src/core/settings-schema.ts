@@ -368,6 +368,12 @@ export const SettingsSchema = Type.Object(
 				default: SETTINGS_DEFAULTS.editorPaddingX,
 			}),
 		),
+		editorHistoryCursorFirst: Type.Optional(
+			Type.Boolean({
+				description: "Require line-start/end cursor placement before arrow history navigation.",
+				default: SETTINGS_DEFAULTS.editorHistoryCursorFirst,
+			}),
+		),
 		outputPad: Type.Optional(
 			Type.Union([Type.Literal(0), Type.Literal(1)], {
 				description: "Horizontal padding for transcript content.",

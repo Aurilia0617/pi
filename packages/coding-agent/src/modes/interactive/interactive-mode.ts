@@ -650,6 +650,7 @@ export class InteractiveMode {
 		this.defaultEditor = new CustomEditor(this.ui, getEditorTheme(), this.keybindings, {
 			paddingX: editorPaddingX,
 			autocompleteMaxVisible,
+			historyCursorFirst: this.settingsManager.getEditorHistoryCursorFirst(),
 			embedWorkingStatus: true,
 		});
 		this.editor = this.defaultEditor;
@@ -2081,11 +2082,14 @@ export class InteractiveMode {
 		}
 		const editorPaddingX = this.settingsManager.getEditorPaddingX();
 		const autocompleteMaxVisible = this.settingsManager.getAutocompleteMaxVisible();
+		const historyCursorFirst = this.settingsManager.getEditorHistoryCursorFirst();
 		this.defaultEditor.setPaddingX(editorPaddingX);
 		this.defaultEditor.setAutocompleteMaxVisible(autocompleteMaxVisible);
+		this.defaultEditor.setHistoryCursorFirst(historyCursorFirst);
 		if (this.editor !== this.defaultEditor) {
 			this.editor.setPaddingX?.(editorPaddingX);
 			this.editor.setAutocompleteMaxVisible?.(autocompleteMaxVisible);
+			this.editor.setHistoryCursorFirst?.(historyCursorFirst);
 		}
 	}
 
@@ -2863,6 +2867,7 @@ export class InteractiveMode {
 			if (newEditor.setAutocompleteMaxVisible !== undefined) {
 				newEditor.setAutocompleteMaxVisible(this.defaultEditor.getAutocompleteMaxVisible());
 			}
+			newEditor.setHistoryCursorFirst?.(this.defaultEditor.getHistoryCursorFirst());
 
 			// Set autocomplete if supported
 			if (newEditor.setAutocompleteProvider && this.autocompleteProvider) {
@@ -4914,6 +4919,7 @@ export class InteractiveMode {
 					showCacheMissNotices: this.settingsManager.getShowCacheMissNotices(),
 					defaultProjectTrust: this.settingsManager.getDefaultProjectTrust(),
 					editorPaddingX: this.settingsManager.getEditorPaddingX(),
+					editorHistoryCursorFirst: this.settingsManager.getEditorHistoryCursorFirst(),
 					outputPad: this.settingsManager.getOutputPad(),
 					autocompleteMaxVisible: this.settingsManager.getAutocompleteMaxVisible(),
 					quietStartup: this.settingsManager.getQuietStartup(),
@@ -5046,6 +5052,13 @@ export class InteractiveMode {
 						this.defaultEditor.setPaddingX(padding);
 						if (this.editor !== this.defaultEditor && this.editor.setPaddingX !== undefined) {
 							this.editor.setPaddingX(padding);
+						}
+					},
+					onEditorHistoryCursorFirstChange: (enabled) => {
+						this.settingsManager.setEditorHistoryCursorFirst(enabled);
+						this.defaultEditor.setHistoryCursorFirst(enabled);
+						if (this.editor !== this.defaultEditor) {
+							this.editor.setHistoryCursorFirst?.(enabled);
 						}
 					},
 					onOutputPadChange: (padding) => {

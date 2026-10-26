@@ -548,6 +548,11 @@
       "description": "Horizontal padding for the input editor.",
       "default": 0
     },
+    "editorHistoryCursorFirst": {
+      "type": "boolean",
+      "description": "Require line-start/end cursor placement before arrow history navigation.",
+      "default": true
+    },
     "outputPad": {
       "anyOf": [
         {

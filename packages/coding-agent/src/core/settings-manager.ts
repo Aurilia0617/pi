@@ -1385,6 +1385,17 @@ export class SettingsManager {
 		this.save();
 	}
 
+	getEditorHistoryCursorFirst(): boolean {
+		const enabled = this.settings.editorHistoryCursorFirst;
+		return typeof enabled === "boolean" ? enabled : SETTINGS_DEFAULTS.editorHistoryCursorFirst;
+	}
+
+	setEditorHistoryCursorFirst(enabled: boolean): void {
+		this.globalSettings.editorHistoryCursorFirst = enabled;
+		this.markModified("editorHistoryCursorFirst");
+		this.save();
+	}
+
 	getEditorPaddingX(): number {
 		return this.settings.editorPaddingX ?? SETTINGS_DEFAULTS.editorPaddingX;
 	}
