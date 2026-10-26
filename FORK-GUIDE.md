@@ -31,21 +31,25 @@
 - `LOCAL_DEV_MACOS.md`、`README.local.md`：内容已并入本文档。
 - `package.json` build 顺序调整：无必要（telemetry 无依赖），弃用。
 
-## 升级流程（核心思想：**rebase 到新 tag，冲突即重审**）
+## 升级流程（中间分支 → 移动 main → 推送 → 删中间分支）
 
-1. **更新依赖与 tag**：
+自始至终只有一条 `main`（本地与 fork 同步）；`vX.Y.Z-local` 只是每次升级的**临时中间分支**，验证完成即删，从不推送。
+
+1. **建中间分支**（用 worktree，不打扰正在运行的会话）：
    ```bash
    cd ~/project/pi
-   git switch main && git status --short        # 必须干净
+   git status --short                                # main 必须干净
    git fetch upstream --tags
-   git rebase vX.Y.Z                            # 逐个重放本地提交
+   git worktree add ~/project/pi-vX.Y.Z-local -b vX.Y.Z-local vX.Y.Z
+   cd ~/project/pi-vX.Y.Z-local
    npm ci
    npm --prefix packages/ai run generate-models   # 生成 providers/data（gitignore，npm ci 不产出，测试会缺模块）
    ```
-2. **重放时重审**（这就是「重新实现」的时机）：
-   - feature 提交冲突 → 按设计理念在新代码上重解，不机械保留旧代码；先确认上游没有自己实现该功能（`git grep -i 'historyCursor\|cursorFirst'`），且 `cursorUp/cursorDown` 段、`applyRuntimeSettings`、面板 splice 链有无结构变化
-   - 文档提交冲突 → 更新 FORK-GUIDE 中的版本号与流程描述，改进记入「改进记录」
-3. **验证清单**（全部通过后再继续，push 前重跑或靠 commit 的 pre-commit）：
+2. **迁移与重审**（中间分支上做，核心思想：以新代码最好的方式重新实现，不搬补丁）：
+   - 参考旧实现：`git diff <旧tag> main -- <files>`，逐处重审：谓词逻辑、面板 splice 链、`SETTINGS_DEFAULTS`、schema 生成产物
+   - 先确认上游没有自己实现（`git grep -i 'historyCursor\|cursorFirst'`），且 `cursorUp/cursorDown` 段、`applyRuntimeSettings` 有无结构变化
+   - 提交单个 feature commit，并更新本文档（版本号、流程、改进记录）
+3. **验证清单**（全部通过后再继续，commit 时 pre-commit 会再跑一遍全家桶）：
    ```bash
    cd packages/tui && node --test test/*.test.ts            # 含上游 #5789 回归用例
    cd ../coding-agent && npx vitest run test/settings-manager.test.ts test/settings-selector.test.ts
@@ -54,8 +58,17 @@
    npm run generate:schemas                                 # 确认 settings.schema.json 无 diff
    # 冒烟：PI_CODING_AGENT_DIR=<临时目录> node --import <resolver> packages/coding-agent/src/cli.ts --version
    ```
-4. **推送 fork**：`git push origin main`（rebase 过历史需要 `--force-with-lease`）。fork 的 main 始终 = 上游最新 tag + 本地提交。
-5. **重启 pi 生效**：正在运行的会话继续用启动时的代码，重启才切换。
+4. **移动 main 并推送 fork**（fork 的 main 始终 = 最新上游 tag + 本地提交）：
+   ```bash
+   git -C ~/project/pi switch main
+   git -C ~/project/pi reset --hard vX.Y.Z-local
+   git -C ~/project/pi push --force-with-lease origin main
+   ```
+5. **重启 pi**（运行中的会话继续用启动时的代码），然后清理中间分支：
+   ```bash
+   git -C ~/project/pi worktree remove ~/project/pi-vX.Y.Z-local
+   git -C ~/project/pi branch -D vX.Y.Z-local
+   ```
 
 ## 从零设置（全新 Mac）
 
@@ -98,7 +111,7 @@ pi() {
   - 面板条目移到编辑器设置区（`editor-padding` 之后）并补 description；
   - tui JSDoc 去掉对 coding-agent 内部常量的引用；
   - 删除重复的 suite reload 测试（已被 settings-manager round-trip 覆盖）。
-- **2026-10-26（切换 main 模型）**：废弃 per-version worktree 与「升级改 zshrc」，`pi()` 固定指向 `~/project/pi`；升级改为 rebase 到新 tag + `push origin main`；旧 main 的本地差异收敛进「历史遗留」一节。
+- **2026-10-26（切换 main 模型）**：自始至终只维护一条 `main`（本地与 fork 同步）；升级流程 = `vX.Y.Z-local` 中间分支重新实现 → 移动 main → `--force-with-lease` 推送 fork → 删中间分支；`pi()` 固定指向 `~/project/pi`，升级不改 zshrc；旧 main 的本地差异收敛进「历史遗留」一节。
 - **未做、供后续参考**：
   - 上游化：以策略钩子形态（`ctx.ui.addHistoryNavigationPolicy`，对称于 `addAutocompleteProvider`）提 PR 的接受度高于布尔开关；上游若合并，本补丁可整体删除，仅在 `SETTINGS_DEFAULTS` 保留默认值。
   - 扩展接口（`ctx.ui.setHistoryCursorFirst`，约 6 行）等真有第二个消费者再加。
