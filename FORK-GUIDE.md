@@ -1,14 +1,14 @@
-# v1.4.0-local 分支说明与升级指南
+# 本仓库说明与升级指南（main 模型）
 
-本分支 = 上游 `v1.4.0`（`4a080252f`）+ **一个**本地提交：cursor-first prompt history navigation。
-worktree 位于 `~/project/pi-v1.4.0-local`，用 `./pi-test.sh` 从源码运行（改代码立即生效，无需构建）。
+本仓库 `main`（`~/project/pi`）= 上游最新 tag + 少量本地提交（1 个功能：cursor-first prompt history navigation，其余为文档）。
+`~/.zshrc` 的 `pi()` 固定指向 `$HOME/project/pi/pi-test.sh`，**升级不需要改 zshrc**；改代码立即生效，无需构建。
 
 ## 与上游的唯一行为差别：光标优先的历史导航
 
 设置项 `editorHistoryCursorFirst`（pi 默认 `true`，可在 `/settings` 或 `settings.json` 关闭）。
 设为 `false` 时行为与上游逐分支等价（真值表穷举验证：84 种状态组合零差异）。
 
-| 状态 | 上游 | 本分支（默认 true） |
+| 状态 | 上游 | 本地（默认 true） |
 |---|---|---|
 | 空编辑器按 ↑ | 切历史 | 同上游 |
 | 有草稿、光标行中按 ↑ | 先跳行首 | 同上游 |
@@ -25,31 +25,27 @@ worktree 位于 `~/project/pi-v1.4.0-local`，用 `./pi-test.sh` 从源码运行
 4. **产物同步**。`schemas/settings.schema.json` 由 `npm run generate:schemas` 生成，改 schema 源后必须重新生成，否则编辑器 `$schema` 校验不认新字段。
 5. **有意取舍**：不写 `CHANGELOG.md`（上游高频改动文件，fork 本地条目每次合并都要手动解冲突）。
 
-## 历史遗留（旧 main 分支，已废弃，未迁移）
+## 历史遗留（旧 main，2026-10-26 废弃，仅 reflog 可救）
 
-- `packages/ai/src/utils/retry.ts` 裸 `"temporarily unavailable"` 重试：网关会报不带 `service` 前缀的文案，上游正则匹配不到。若仍需要，在新分支 `RETRYABLE_PROVIDER_ERROR_PATTERN` 里加一行 `"temporarily unavailable"` 即可（非重试名单先于它判断，不会误伤 ChatGPT 订阅类报错）；上游自己的状态码边界正则 `(?<![a-z0-9])(?:429|...)` 更优，勿用旧裸码。
-- `LOCAL_DEV_MACOS.md`、`README.local.md`：内容已并入本文档（从零设置一节）。
+- `packages/ai/src/utils/retry.ts` 裸 `"temporarily unavailable"` 重试：网关会报不带 `service` 前缀的文案，上游正则匹配不到。若仍需要，在 `RETRYABLE_PROVIDER_ERROR_PATTERN` 里加一行 `"temporarily unavailable"` 即可（非重试名单先于它判断，不会误伤 ChatGPT 订阅类报错）；上游自己的状态码边界正则 `(?<![a-z0-9])(?:429|...)` 更优，勿用旧裸码。
+- `LOCAL_DEV_MACOS.md`、`README.local.md`：内容已并入本文档。
 - `package.json` build 顺序调整：无必要（telemetry 无依赖），弃用。
 
-## 下次升级流程（核心思想：**不搬补丁，重新实现**）
+## 升级流程（核心思想：**rebase 到新 tag，冲突即重审**）
 
-1. **拉干净上游**：
+1. **更新依赖与 tag**：
    ```bash
+   cd ~/project/pi
+   git switch main && git status --short        # 必须干净
    git fetch upstream --tags
-   git worktree add ~/project/pi-vX.Y.Z-local -b vX.Y.Z-local vX.Y.Z
-   cd ~/project/pi-vX.Y.Z-local && npm ci
+   git rebase vX.Y.Z                            # 逐个重放本地提交
+   npm ci
    npm --prefix packages/ai run generate-models   # 生成 providers/data（gitignore，npm ci 不产出，测试会缺模块）
    ```
-2. **对照旧实现，重读新上游**。先看上游新版本有没有动到：
-   - `packages/tui/src/components/editor.ts` 的 `cursorUp`/`cursorDown` 段与 `navigateHistory`
-   - `applyRuntimeSettings` / `setCustomEditorComponent` / settings 面板的条目插入方式
-   - 上游是否已实现同等功能（`git grep -i 'historyCursor\|cursorFirst'`）或引入新的相关设置
-3. **以新代码最好的方式重新实现**，而不是机械 apply 旧 diff。旧分支只当行为规格（第一节的等价表）与测试来源。提取可借鉴：
-   ```bash
-   git diff v1.4.0 v1.4.0-local -- <files> > /tmp/cursor-first.patch && git apply -3 /tmp/cursor-first.patch
-   ```
-   但 apply 后必须重审每一处：谓词逻辑是否仍成立、面板插入点（splice 链）是否变化、`SETTINGS_DEFAULTS` 位置、schema 与生成产物。
-4. **验证清单**（全部通过后再提交，pre-commit 会再跑一遍全家桶）：
+2. **重放时重审**（这就是「重新实现」的时机）：
+   - feature 提交冲突 → 按设计理念在新代码上重解，不机械保留旧代码；先确认上游没有自己实现该功能（`git grep -i 'historyCursor\|cursorFirst'`），且 `cursorUp/cursorDown` 段、`applyRuntimeSettings`、面板 splice 链有无结构变化
+   - 文档提交冲突 → 更新 FORK-GUIDE 中的版本号与流程描述，改进记入「改进记录」
+3. **验证清单**（全部通过后再继续，push 前重跑或靠 commit 的 pre-commit）：
    ```bash
    cd packages/tui && node --test test/*.test.ts            # 含上游 #5789 回归用例
    cd ../coding-agent && npx vitest run test/settings-manager.test.ts test/settings-selector.test.ts
@@ -58,26 +54,26 @@ worktree 位于 `~/project/pi-v1.4.0-local`，用 `./pi-test.sh` 从源码运行
    npm run generate:schemas                                 # 确认 settings.schema.json 无 diff
    # 冒烟：PI_CODING_AGENT_DIR=<临时目录> node --import <resolver> packages/coding-agent/src/cli.ts --version
    ```
-5. **提交单 commit**（feat(tui,coding-agent): cursor-first prompt history navigation），工作树保持干净，本文件随分支走。
-6. **更新本文档**：实现方式或思想上有改进（上游合并了相关功能使本补丁归零、发现更好的接线方式）时，在「改进记录」追加一条并修订正文。
+4. **推送 fork**：`git push origin main`（rebase 过历史需要 `--force-with-lease`）。fork 的 main 始终 = 上游最新 tag + 本地提交。
+5. **重启 pi 生效**：正在运行的会话继续用启动时的代码，重启才切换。
 
 ## 从零设置（全新 Mac）
 
 前置：Homebrew、Git、Node ≥ 22.19。
 
 ```bash
-# 1. 克隆仓库（origin 自己的 fork，upstream 官方），主克隆固定在 ~/project/pi
+# 1. 克隆自己的 fork（已含 main），配 upstream
 git clone <你的 fork> ~/project/pi
 git -C ~/project/pi remote add upstream https://github.com/earendil-works/pi.git
 
-# 2. 配置目录 + worktree + 依赖
+# 2. 依赖
+cd ~/project/pi && npm ci && npm --prefix packages/ai run generate-models
+
+# 3. 配置目录（首次）
 mkdir -p ~/Documents/pi_config
-git -C ~/project/pi fetch upstream --tags
-git -C ~/project/pi worktree add ~/project/pi-v1.4.0-local -b v1.4.0-local v1.4.0   # 或从 origin 拉本分支
-cd ~/project/pi-v1.4.0-local && npm ci && npm --prefix packages/ai run generate-models
 ```
 
-`~/.zshrc` 最小配置（配置统一放自定义目录，不碰默认 `~/.pi/agent`）：
+`~/.zshrc` 写一次、以后不再改（配置统一放自定义目录，不碰默认 `~/.pi/agent`）：
 
 ```zsh
 export PI_CODING_AGENT_DIR="$HOME/Documents/pi_config"
@@ -85,27 +81,13 @@ export PI_ASK_USER_DISPLAY_MODE=inline
 
 pi() {
   PI_CODING_AGENT_DIR="$HOME/Documents/pi_config" \
-    "$HOME/project/pi-v1.4.0-local/pi-test.sh" "$@"
+    "$HOME/project/pi/pi-test.sh" "$@"
 }
 ```
 
-验证：`source ~/.zshrc && type pi && pi --version`（期望 1.4.0）。
+验证：`source ~/.zshrc && type pi && pi --version`。
 
-说明：`pi-test.sh` 被 git 跟踪且保留可执行位，检出即用；需要回退旧版本时照抄一个函数改路径即可。
-
-## 升级后更新 ~/.zshrc
-
-新 worktree 验证通过后：
-
-1. 把 `pi()` 里的路径改成新 worktree 的 `pi-test.sh`（只改这一处路径）；过渡期可保留旧 worktree 的函数作回退，稳定后删掉。
-2. 清理旧 worktree（确认无未合并改动后）：
-   ```bash
-   git -C ~/project/pi worktree remove ~/project/pi-v1.4.0-local
-   git -C ~/project/pi branch -d v1.4.0-local   # 可选
-   ```
-3. `source ~/.zshrc` 或新开终端，`pi --version` 确认新版本号。
-
-正在运行的 pi 会话不受 `~/.zshrc` 修改影响，它继续用启动时那棵树；重启 pi 才切换。回退同理。
+说明：`pi-test.sh` 被 git 跟踪且保留可执行位，检出即用；函数内重复传 `PI_CODING_AGENT_DIR` 是为了显式覆盖，防止外部环境变量漂移。
 
 ## 改进记录
 
@@ -116,6 +98,7 @@ pi() {
   - 面板条目移到编辑器设置区（`editor-padding` 之后）并补 description；
   - tui JSDoc 去掉对 coding-agent 内部常量的引用；
   - 删除重复的 suite reload 测试（已被 settings-manager round-trip 覆盖）。
+- **2026-10-26（切换 main 模型）**：废弃 per-version worktree 与「升级改 zshrc」，`pi()` 固定指向 `~/project/pi`；升级改为 rebase 到新 tag + `push origin main`；旧 main 的本地差异收敛进「历史遗留」一节。
 - **未做、供后续参考**：
   - 上游化：以策略钩子形态（`ctx.ui.addHistoryNavigationPolicy`，对称于 `addAutocompleteProvider`）提 PR 的接受度高于布尔开关；上游若合并，本补丁可整体删除，仅在 `SETTINGS_DEFAULTS` 保留默认值。
   - 扩展接口（`ctx.ui.setHistoryCursorFirst`，约 6 行）等真有第二个消费者再加。
