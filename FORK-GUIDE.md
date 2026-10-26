@@ -62,6 +62,7 @@
    ```bash
    git -C ~/project/pi switch main
    git -C ~/project/pi reset --hard vX.Y.Z-local
+   npm ci --prefix ~/project/pi && npm --prefix ~/project/pi/packages/ai run generate-models
    git -C ~/project/pi push --force-with-lease origin main
    ```
 5. **重启 pi**（运行中的会话继续用启动时的代码），然后清理中间分支：
