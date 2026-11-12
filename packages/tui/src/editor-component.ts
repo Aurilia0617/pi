@@ -39,6 +39,9 @@ export interface EditorComponent extends Component {
 	/** Add text to history for up/down navigation */
 	addToHistory?(text: string): void;
 
+	/** Require line-start/end cursor placement before arrow keys change history entries. */
+	setHistoryCursorFirst?(enabled: boolean): void;
+
 	// =========================================================================
 	// Advanced text manipulation (optional)
 	// =========================================================================

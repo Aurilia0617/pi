@@ -89,6 +89,7 @@ export interface SettingsConfig {
 	treeFilterMode: "default" | "no-tools" | "user-only" | "labeled-only" | "all";
 	showHardwareCursor: boolean;
 	editorPaddingX: number;
+	editorHistoryCursorFirst: boolean;
 	outputPad: 0 | 1;
 	autocompleteMaxVisible: number;
 	quietStartup: QuietStartup;
@@ -129,6 +130,7 @@ export interface SettingsCallbacks {
 	onTreeFilterModeChange: (mode: "default" | "no-tools" | "user-only" | "labeled-only" | "all") => void;
 	onShowHardwareCursorChange: (enabled: boolean) => void;
 	onEditorPaddingXChange: (padding: number) => void;
+	onEditorHistoryCursorFirstChange: (enabled: boolean) => void;
 	onOutputPadChange: (padding: 0 | 1) => void;
 	onAutocompleteMaxVisibleChange: (maxVisible: number) => void;
 	onQuietStartupChange: (quiet: QuietStartup) => void;
@@ -835,6 +837,16 @@ export class SettingsSelectorComponent extends Container {
 			values: ["0", "1", "2", "3"],
 		});
 
+		// Cursor-first history toggle (insert after editor-padding)
+		const cursorFirstIndex = items.findIndex((item) => item.id === "editor-padding");
+		items.splice(cursorFirstIndex + 1, 0, {
+			id: "history-cursor-first",
+			label: "Cursor-first history",
+			description: "Arrow keys reach the line start/end before changing prompt history entries",
+			currentValue: config.editorHistoryCursorFirst ? "true" : "false",
+			values: ["true", "false"],
+		});
+
 		// Output padding toggle (insert after editor-padding)
 		const editorPaddingIndex = items.findIndex((item) => item.id === "editor-padding");
 		items.splice(editorPaddingIndex + 1, 0, {
@@ -962,6 +974,9 @@ export class SettingsSelectorComponent extends Container {
 						break;
 					case "editor-padding":
 						callbacks.onEditorPaddingXChange(parseInt(newValue, 10));
+						break;
+					case "history-cursor-first":
+						callbacks.onEditorHistoryCursorFirstChange(newValue === "true");
 						break;
 					case "output-padding":
 						callbacks.onOutputPadChange(newValue === "0" ? 0 : 1);

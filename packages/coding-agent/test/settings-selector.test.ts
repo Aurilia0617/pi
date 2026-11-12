@@ -86,6 +86,29 @@ describe("SettingsSelectorComponent", () => {
 		expect(onSessionShareDestinationChange.mock.calls.flat()).toEqual(["gist", "radius", "auto"]);
 	});
 
+	it("switches cursor-first history in both directions", () => {
+		const onEditorHistoryCursorFirstChange = vi.fn();
+		const config = {
+			editorHistoryCursorFirst: true,
+			warnings: {},
+			defaultModel: "not set",
+			availableDefaultModels: [],
+			availableThinkingLevels: [],
+			modelThinkingLevels: {},
+			availableThemes: [],
+		} as unknown as SettingsConfig;
+		const callbacks = {
+			onEditorHistoryCursorFirstChange,
+		} as unknown as SettingsCallbacks;
+		const list = new SettingsSelectorComponent(config, callbacks).getSettingsList();
+		list.selectItem("history-cursor-first");
+
+		list.handleInput("\r");
+		list.handleInput("\r");
+
+		expect(onEditorHistoryCursorFirstChange.mock.calls.flat()).toEqual([false, true]);
+	});
+
 	it("keeps the configured fixed theme marked while browsing", () => {
 		const config = {
 			defaultModel: "not set",

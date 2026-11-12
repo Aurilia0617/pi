@@ -45,6 +45,7 @@ export const SETTINGS_DEFAULTS = {
 	doubleEscapeAction: "tree",
 	treeFilterMode: "default",
 	editorPaddingX: 0,
+	editorHistoryCursorFirst: true,
 	outputPad: 1,
 	autocompleteMaxVisible: 5,
 	markdown: {

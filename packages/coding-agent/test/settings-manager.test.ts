@@ -387,6 +387,43 @@ describe("SettingsManager", () => {
 		});
 	});
 
+	describe("editorHistoryCursorFirst", () => {
+		it("defaults to cursor-first navigation and supports disabling it", () => {
+			expect(SettingsManager.inMemory().getEditorHistoryCursorFirst()).toBe(true);
+			expect(SettingsManager.inMemory({ editorHistoryCursorFirst: false }).getEditorHistoryCursorFirst()).toBe(
+				false,
+			);
+		});
+
+		it("persists the setting and reloads external changes", async () => {
+			const manager = SettingsManager.create(projectDir, agentDir);
+			const settingsPath = join(agentDir, "settings.json");
+			manager.setEditorHistoryCursorFirst(false);
+			await manager.flush();
+			expect(JSON.parse(readFileSync(settingsPath, "utf8")).editorHistoryCursorFirst).toBe(false);
+
+			writeFileSync(settingsPath, JSON.stringify({ editorHistoryCursorFirst: true }));
+			await manager.reload();
+			expect(manager.getEditorHistoryCursorFirst()).toBe(true);
+		});
+
+		it("respects trusted project overrides", () => {
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ editorHistoryCursorFirst: true }));
+			writeFileSync(join(projectDir, ".pi", "settings.json"), JSON.stringify({ editorHistoryCursorFirst: false }));
+			expect(SettingsManager.create(projectDir, agentDir).getEditorHistoryCursorFirst()).toBe(false);
+			expect(
+				SettingsManager.create(projectDir, agentDir, { projectTrusted: false }).getEditorHistoryCursorFirst(),
+			).toBe(true);
+		});
+
+		it("falls back to cursor-first navigation for malformed values", () => {
+			for (const editorHistoryCursorFirst of [null, 0, "false", {}]) {
+				writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ editorHistoryCursorFirst }));
+				expect(SettingsManager.create(projectDir, agentDir).getEditorHistoryCursorFirst()).toBe(true);
+			}
+		});
+	});
+
 	describe("httpIdleTimeoutMs", () => {
 		it("should default to 5 minutes", () => {
 			const manager = SettingsManager.create(projectDir, agentDir);
